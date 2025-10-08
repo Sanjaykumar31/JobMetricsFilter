@@ -1,0 +1,18 @@
+README
+
+Instructions for Uploading Excel File
+
+Please upload an Excel (.xlsx) file that meets the following requirements:
+The file must contain exactly two sheets named:
+
+1
+2
+
+Each sheet must have the following columns in this exact order and with these exact names:
+
+Tenant
+System Job
+Trigger Type
+Completed At
+
+Make sure the column names are spelled exactly as above (case-sensitive) and appear in the specified order for the app to process the file correctly.
