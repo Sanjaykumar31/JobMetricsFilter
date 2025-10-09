@@ -59,10 +59,64 @@ def process_excel(file, start_date, end_date):
         tenant_df['Percentage'] = (tenant_df['Job Count'] / tenant_total * 100).round(2).astype(str) + '%'
         tenant_df.loc[len(tenant_df.index)] = ['Total', tenant_total, '100%']
 
+        # ----- 4. Tenant-wise System Job and Trigger Type Count with Global Percentages -----
+        tenant_sysjob = df_filtered.groupby(['Tenant', df_filtered['System Job'].str.lower()]).size().unstack(fill_value=0)
+        tenant_sysjob = tenant_sysjob.rename(columns={'yes': 'System Jobs', 'no': 'User-Defined Jobs'})
+
+        tenant_trigger = df_filtered.groupby(['Tenant', df_filtered['Trigger Type'].str.lower()]).size().unstack(fill_value=0)
+        tenant_trigger = tenant_trigger.rename(columns={'ad-hoc': 'Adhoc', 'scheduled': 'Scheduled'})
+
+        # Merge both on Tenant
+        tenant_metrics = tenant_sysjob.join(tenant_trigger, how='outer').fillna(0).reset_index()
+
+        # Ensure all expected columns exist
+        for col in ['System Jobs', 'User-Defined Jobs', 'Adhoc', 'Scheduled']:
+            if col not in tenant_metrics.columns:
+                tenant_metrics[col] = 0
+
+        # Convert to integer
+        tenant_metrics[['System Jobs', 'User-Defined Jobs', 'Adhoc', 'Scheduled']] = tenant_metrics[
+            ['System Jobs', 'User-Defined Jobs', 'Adhoc', 'Scheduled']
+        ].astype(int)
+
+        # Total sums across all tenants (for global percentages)
+        total_yes = tenant_metrics['System Jobs'].sum()
+        total_no = tenant_metrics['User-Defined Jobs'].sum()
+        total_adhoc = tenant_metrics['Adhoc'].sum()
+        total_scheduled = tenant_metrics['Scheduled'].sum()
+
+        # Global percentages per column, avoiding division by zero
+        tenant_metrics['System Jobs %'] = (
+            tenant_metrics['System Jobs'] / (total_yes if total_yes != 0 else 1) * 100
+        ).round(2).astype(str) + '%'
+        tenant_metrics['User-Defined Jobs %'] = (
+            tenant_metrics['User-Defined Jobs'] / (total_no if total_no != 0 else 1) * 100
+        ).round(2).astype(str) + '%'
+        tenant_metrics['Adhoc %'] = (
+            tenant_metrics['Adhoc'] / (total_adhoc if total_adhoc != 0 else 1) * 100
+        ).round(2).astype(str) + '%'
+        tenant_metrics['Scheduled %'] = (
+            tenant_metrics['Scheduled'] / (total_scheduled if total_scheduled != 0 else 1) * 100
+        ).round(2).astype(str) + '%'
+
+        # Reorder columns as requested
+        ordered_columns = [
+            'Tenant',
+            'System Jobs', 'System Jobs %',
+            'User-Defined Jobs', 'User-Defined Jobs %',
+            'Adhoc', 'Adhoc %',
+            'Scheduled', 'Scheduled %'
+        ]
+
+        existing_cols = [col for col in ordered_columns if col in tenant_metrics.columns]
+
+        tenant_metrics = tenant_metrics[existing_cols]
+
         # Store results
-        all_results[f"Environment_{idx}_Job_Type"] = job_type_df
-        all_results[f"Environment_{idx}_Trigger_Type"] = trigger_df
-        all_results[f"Environment_{idx}_Tenant_Job_Count"] = tenant_df
+        all_results[f"Env_{idx}_Job_Type"] = job_type_df
+        all_results[f"Env_{idx}_Trigger_Type"] = trigger_df
+        all_results[f"Env_{idx}_TenantWise_Job_Count"] = tenant_df
+        all_results[f"Env_{idx}_TenantWise_System_Trigger_Count"] = tenant_metrics
 
     if not all_results:
         raise ValueError("No data found within the selected date range in any sheet.")
@@ -78,8 +132,8 @@ def process_excel(file, start_date, end_date):
 
 
 # --- Streamlit UI ---
-st.set_page_config(page_title="Comparative Job Analysis", layout="centered")
-st.title("📊 Job Report Generator")
+st.set_page_config(page_title="Jobs Metrics Generator", layout="wide", page_icon=":biohazard:")
+st.title("📊 Job Metrics Generator")
 
 # 📘 README Instructions
 with st.expander("📖 README - Instructions for Uploading Excel File"):
@@ -96,7 +150,7 @@ with st.expander("📖 README - Instructions for Uploading Excel File"):
 """)
 
 # 📤 File Upload
-uploaded_file = st.file_uploader("📂 Upload your Excel file", type=["xlsx"])
+uploaded_file = st.file_uploader("📂 Upload your file here ::", type=["xlsx"])
 
 # 📅 Date Range Picker
 st.markdown("### 📅 Select Date Range to Filter the Metrics")
